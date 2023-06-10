@@ -19,15 +19,15 @@ public class Person implements Serializable {
     public Person(){
 
     }
-    public Person(String name, Integer height, ColorEye eyeColor, ColorHair hairColor, Country nationality){
-        this.name = name;
-        this.height = height;
-        this.eyeColor = eyeColor;
-        this.hairColor = hairColor;
-        this.nationality = nationality;
+    public Person(String name, Integer height, ColorEye eyeColor, ColorHair hairColor, Country nationality) throws IncorrectGroupValueException{
+        this.setName(name);
+        this.setHeight(height);
+        this.setHairColor(hairColor);
+        this.setEyeColor(eyeColor);
+        this.setNationality(nationality);
     }
 
-    public static Person setPerson(List<String> args){
+    /*public static Person setPerson(List<String> args){
         Person person = new Person();
         try {
             person.setName(args.get(0));
@@ -41,6 +41,8 @@ public class Person implements Serializable {
         }
         return person;
     }
+
+     */
     /**
      * Method checks the correctness of person's name
      * @param name verifiable name

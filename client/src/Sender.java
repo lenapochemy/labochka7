@@ -1,4 +1,5 @@
 import commands.Command;
+import manager.requestManager.Request;
 import manager.requestManager.Response;
 import manager.requestManager.Serializer;
 
@@ -11,8 +12,8 @@ import java.nio.channels.SocketChannel;
 public class Sender {
     private static final int SLEEP_TIME = 500;
 
-    public static void send(Command command, SocketChannel channel, Selector selector) throws InterruptedException, IOException{
-        ByteBuffer buffer = Serializer.serializeCommand(command);
+    public static void send(Request request, SocketChannel channel, Selector selector) throws InterruptedException, IOException{
+        ByteBuffer buffer = Serializer.serialize(request);
         channel.write(buffer);
         channel.register(selector, SelectionKey.OP_READ);
         Thread.sleep(SLEEP_TIME);
@@ -23,6 +24,6 @@ public class Sender {
         ByteBuffer byteBuffer = ByteBuffer.allocate(socketChannel.socket().getReceiveBufferSize());
         socketChannel.read(byteBuffer);
         channel.register(selector, SelectionKey.OP_WRITE);
-        return Serializer.deserializeResponse(byteBuffer);
+        return (Response) Serializer.deserialize(byteBuffer);
      }
 }

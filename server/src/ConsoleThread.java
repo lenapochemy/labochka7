@@ -1,13 +1,11 @@
 import commands.Command;
 import commands.Exit;
 import commands.Save;
-import exceptions.CommandException;
-import exceptions.FileException;
-import exceptions.IncorrectScriptException;
-import exceptions.RecurentScriptException;
+import exceptions.*;
 import manager.CommandManager;
 import manager.ConsoleManager;
 import manager.requestManager.Response;
+import manager.users.User;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -18,6 +16,7 @@ import java.util.Scanner;
 public class ConsoleThread extends Thread{
 
     private volatile boolean running = true;
+    //User user = ServerConfig.admin;
     @Override
     public void run(){
         while (running){
@@ -38,7 +37,7 @@ public class ConsoleThread extends Thread{
 
                         command = null;
                     } else {
-                        command = ServerConfig.commandManager.buildCommand(input, ServerConfig.scannerManager);
+                        command = ServerConfig.commandManager.buildCommand(input, ServerConfig.scannerManager, true);
                     }
                 }
             } catch (CommandException e){
@@ -47,10 +46,12 @@ public class ConsoleThread extends Thread{
             } catch (IncorrectScriptException e){
                 ConsoleManager.printError("Incorrect script");
                 command = null;
+            } catch (AuthorizedException e){
+                command = null;
             }
 
             if(command != null) {
-                Response resp = command.execute(ServerConfig.collectionManager);
+                Response resp = command.execute(ServerConfig.collectionManager, ServerConfig.admin);
                 ConsoleManager.printSuccess(resp.getMessage());
             }
         }
@@ -91,9 +92,9 @@ public class ConsoleThread extends Thread{
                         scriptCollection.add(newFileName);
                         scriptReader(newFileName, commandManager);
                     } else {
-                        Command command = commandManager.buildCommand(input, ServerConfig.scannerManager);
+                        Command command = commandManager.buildCommand(input, ServerConfig.scannerManager, true);
                         if (command != null) {
-                            Response resp = command.execute(ServerConfig.collectionManager);
+                            Response resp = command.execute(ServerConfig.collectionManager, ServerConfig.admin);
                             ConsoleManager.printSuccess(resp.getMessage());
                         }
                         //Response commandResp = start(command);
@@ -105,6 +106,8 @@ public class ConsoleThread extends Thread{
                     ConsoleManager.printError("Script is incorrect");
                 } catch (CommandException e){
                     ConsoleManager.printError("Incorrect command in script");
+                } catch (AuthorizedException e){
+
                 }
 
             }

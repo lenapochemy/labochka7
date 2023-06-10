@@ -2,10 +2,14 @@ package manager;
 
 import data.FormOfEducation;
 import data.StudyGroup;
+import exceptions.DatabaseException;
 import exceptions.NullCollectionException;
 import exceptions.NullException;
+import manager.database.DataBaseHandler;
+import manager.users.User;
 
-import java.io.FileNotFoundException;
+import javax.xml.crypto.Data;
+import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
@@ -14,6 +18,9 @@ import java.util.Set;
  * Class responsible for working with the collection
  */
 public class CollectionManager {
+
+    public DataBaseHandler dataBaseHandler;
+
     /**
      * Collection of groups
      */
@@ -23,7 +30,6 @@ public class CollectionManager {
      */
     private Set<Integer> idCollection = new HashSet<>();
     private int newId = 1;
-    private final FileManager fileManager;
 
     /**
      * Time when the collection was last modified
@@ -34,10 +40,10 @@ public class CollectionManager {
      */
     private LocalDate lastSaveDate;
 
-    public CollectionManager(FileManager fileManager){
+    public CollectionManager(DataBaseHandler dataBaseHandler){
         this.lastInitDate = null;
         this.lastSaveDate = null;
-        this.fileManager = fileManager;
+        this.dataBaseHandler = dataBaseHandler;
     }
 
     /**
@@ -47,28 +53,6 @@ public class CollectionManager {
         this.studyGroupCollection = new HashSet<>();
     }
 
-    /**
-     * Method fills the collection with groups from the file
-     */
-    public void readFromFile(){
-        try{
-            this.studyGroupCollection = fileManager.readFromFile();
-            if(collectionSize() !=0){
-                for(StudyGroup group : studyGroupCollection){
-                    if(group.getId() == StudyGroup.wrongId){
-                        studyGroupCollection.remove(group);
-                    } else{
-                        idCollection.add(group.getId());
-                    }
-                }
-            }
-            if(studyGroupCollection == null){
-                createCollection();
-            }
-        } catch (FileNotFoundException e){
-            ConsoleManager.printError(e);
-        }
-    }
 
     /**
      * Method counts the number of elements in the collection
@@ -83,48 +67,60 @@ public class CollectionManager {
         }
     }
 
-    /**
-     * Method writes the collection to a file
-     */
-    public void writeToFile(){
-        fileManager.writeToFile(this.studyGroupCollection);
+    public void loadFromDatabase(){
+        this.studyGroupCollection = dataBaseHandler.loadCollectionFromDatabase();
+        ConsoleManager.printInfo("Collection was filled from database, groups count: "+ collectionSize());
     }
 
     /**
      * Method generates a new unique id for the group
      * @return group's id
      */
-    public int generateId(){
+   /* public int generateId(){
         while(!idCollection.add(newId)){
             newId++;
         }
         return newId;
     }
 
+    */
+
     /**
      * Method adds a new element to the collection
      * @param studyGroup new element for collection
      */
-    public void addToCollection(StudyGroup studyGroup){
-        studyGroupCollection.add(studyGroup);
-        lastInitDate = LocalDate.now();
+    public void addToCollection(StudyGroup studyGroup, User user) throws DatabaseException {
+        int id = dataBaseHandler.addStudyGroup(studyGroup, user);
+        if( id != 0){
+            studyGroup.setId(id);
+            studyGroupCollection.add(studyGroup);
+            lastInitDate = LocalDate.now();
+            lastSaveDate = LocalDate.now();
+        } else throw new DatabaseException();
+    }
+
+    public void addToCollectionWithId(StudyGroup studyGroup, User user) throws DatabaseException{
+        if(dataBaseHandler.addStudyGroupWithId(studyGroup, user)){
+            studyGroupCollection.add(studyGroup);
+            lastInitDate = LocalDate.now();
+            lastSaveDate = LocalDate.now();
+        } else throw new DatabaseException();
     }
 
     /**
      * Method clears the collection
      */
-    public void clearCollection(){
-        studyGroupCollection.clear();
-        idCollection.clear();
+    public void clearCollection(User user) throws DatabaseException{
+        if(user.getLogin().equals("admin")){
+            if(dataBaseHandler.clearCollectionAdmin()){
+                studyGroupCollection.clear();
+                idCollection.clear();
+            } else throw new DatabaseException();
+        } else {
+            this.studyGroupCollection = dataBaseHandler.clearCollection(user);
+        }
     }
 
-    /**
-     * Method saves the collection to a file
-     */
-    public void saveCollection(){
-        this.writeToFile();
-        lastSaveDate = LocalDate.now();
-    }
 
     /**
      * Method finds the group with the maximum number of students in the collection
@@ -150,25 +146,32 @@ public class CollectionManager {
         return null;
     }
 
+    public void updateByID(StudyGroup oldGroup, StudyGroup newGroup, User user) throws DatabaseException{
+        removeFromCollection(oldGroup, user);
+        addToCollectionWithId(newGroup, user);
+
+    }
+
     /**
      * Method deletes group from the collection
      * @param studyGroup the group to delete
      */
-    public void removeFromCollection(StudyGroup studyGroup){
-        idCollection.remove(studyGroup.getId());
-        studyGroupCollection.remove(studyGroup);
+    public void removeFromCollection(StudyGroup studyGroup, User user) throws DatabaseException{
+        if(dataBaseHandler.removeGroup(studyGroup, user)) {
+            idCollection.remove(studyGroup.getId());
+            studyGroupCollection.remove(studyGroup);
+        } else throw new DatabaseException();
     }
 
     /**
      * Method removes a group by the id from the collection
      * @param id id of the group to delete
      */
-    public boolean removeByID(int id){
+    public boolean removeByID(int id, User user) throws DatabaseException{
         StudyGroup studyGroup = getByID(id);
         try {
             if(studyGroup == null) throw new NullException();
-            idCollection.remove(id);
-            studyGroupCollection.remove(studyGroup);
+            removeFromCollection(studyGroup, user);
             return true;
         } catch (NullException e){
             ConsoleManager.printError("Study group with this ID is not exists");
@@ -180,7 +183,7 @@ public class CollectionManager {
      * Method removes groups with a larger number of students from the collection
      * @param count max number of students in groups that remain in the collection
      */
-    public void removeGreater(Integer count) throws NullCollectionException{
+    public int removeGreater(Integer count, User user) throws NullCollectionException, NullException{
             if (studyGroupCollection.isEmpty()) throw new NullCollectionException();
             HashSet<Integer> idSet = new HashSet<>();
             for (StudyGroup group : studyGroupCollection) {
@@ -188,17 +191,25 @@ public class CollectionManager {
                     idSet.add(group.getId());
                 }
             }
-            for (Integer id : idSet) {
-                removeByID(id);
+            if(idSet.isEmpty()) throw new NullException();
+        int number = idSet.size();
+        for(Integer id: idSet){
+            try {
+                removeByID(id, user);
+            } catch (DatabaseException e){
+                number--;
             }
+        }
+        return number;
 
     }
+
 
     /**
      * Method removes groups with a smaller number of students from the collection
      * @param count min number of students in groups that remain in the collection
      */
-    public void removeLower(Integer count) throws NullCollectionException{
+    public int removeLower(Integer count, User user) throws NullCollectionException, NullException{
         if (studyGroupCollection.isEmpty()) throw new NullCollectionException();
         HashSet<Integer> idSet = new HashSet<>();
         for(StudyGroup group : studyGroupCollection){
@@ -206,21 +217,37 @@ public class CollectionManager {
                 idSet.add(group.getId());
             }
         }
+        if(idSet.isEmpty()) throw new NullException();
+        int number = idSet.size();
         for(Integer id: idSet){
-            removeByID(id);
+            try {
+                removeByID(id, user);
+            } catch (DatabaseException e){
+                number--;
+            }
         }
+        return number;
     }
 
     /**
      * Method removes a group with this form of education from the collection
      * @param formOfEducation form of education
      */
-    public void removeByFormOfEducation(FormOfEducation formOfEducation){
-        for(StudyGroup group : studyGroupCollection){
-            if(group.getFormOfEducation().equals(formOfEducation)){
-                removeFromCollection(group);
-                break;
+    public boolean removeByFormOfEducation(FormOfEducation formOfEducation, User user)  {
+        try {
+            for (StudyGroup group : studyGroupCollection) {
+                if (group.getFormOfEducation().equals(formOfEducation) && dataBaseHandler.isOwner(group.getId(), user.getLogin())) {
+                    removeFromCollection(group, user);
+                    return true;
+                    //break;
                 }
+            }
+            return false;
+        } catch (SQLException e){
+            ConsoleManager.printError("problem with data base");
+            return false;
+        } catch (DatabaseException e){
+            return false;
         }
     }
 

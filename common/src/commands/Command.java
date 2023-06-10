@@ -2,6 +2,7 @@ package commands;
 
 import manager.CollectionManager;
 import manager.requestManager.Response;
+import manager.users.User;
 
 import java.io.Serializable;
 import java.util.Objects;
@@ -20,7 +21,7 @@ public abstract class Command implements Serializable {
         this.args = args;
     }
 
-    public abstract Response execute(CollectionManager collectionManager);
+    public abstract Response execute(CollectionManager collectionManager, User user);
 
     public String getName(){
         return name;

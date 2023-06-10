@@ -2,6 +2,7 @@ package data;
 
 import exceptions.*;
 import manager.ConsoleManager;
+import manager.users.User;
 
 import java.io.Serializable;
 import java.time.LocalDate;
@@ -31,49 +32,18 @@ public class StudyGroup implements Serializable {
     }
 
     public StudyGroup(int id, String name, Coordinates coordinates, LocalDate creationDate, Integer studentsCount,
-                      FormOfEducation formOfEducation, Semester semesterEnum, Person groupAdmin){
-        this.id = id;
-        this.name = name;
-        this.coordinates = coordinates;
-        this.creationDate = creationDate;
-        this.studentsCount = studentsCount;
-        this.formOfEducation = formOfEducation;
-        this.semesterEnum = semesterEnum;
-        this.groupAdmin = groupAdmin;
+                      FormOfEducation formOfEducation, Semester semesterEnum, Person groupAdmin) throws IncorrectGroupValueException{
+        this.setId(id);
+        this.setName(name);
+        this.setCoordinates(coordinates);
+        this.setCreationDate(creationDate);
+        this.setStudentsCount(studentsCount);
+        this.setFormOfEducation(formOfEducation);
+        this.setSemesterEnum(semesterEnum);
+        this.setGroupAdmin(groupAdmin);
     }
 
-    //TODO добавить ва
-    public static StudyGroup setStudyGroup(List<String> args){
-        StudyGroup studyGroup = new StudyGroup();
-        try {
-            studyGroup.setId(defaultID);
-            studyGroup.setCreationDate(default_date);
-            studyGroup.setName(args.get(0));
-            try {
-                Coordinates coord = new Coordinates(Integer.parseInt(args.get(1)), Double.parseDouble(args.get(2)));
-                studyGroup.setCoordinates(coord);
-            } catch (IncorrectGroupValueException e) {
-                ConsoleManager.printError("Incorrect coordinates value");
-            }
-            studyGroup.setStudentsCount(Integer.parseInt(args.get(3)));
-            studyGroup.setFormOfEducation(FormOfEducation.valueOf(args.get(4)));
-            studyGroup.setSemesterEnum(Semester.valueOf(args.get(5)));
-            studyGroup.setGroupAdmin(Person.setPerson(args.subList(6, 11)));
-            return studyGroup;
-        } catch (NumberFormatException e){
-            ConsoleManager.printError("Numbers value should be a number");
-            return null;
-        } catch (IllegalArgumentException e){
-            ConsoleManager.printError("Enums value should be from the list\n" +
-                            "Form of education list: " + FormOfEducation.getAllValues() + "\n" +
-                            "Semester list: " + Semester.getAllValues() + "\n" +
-                            "Country list: " + Country.getAllValues() + "\n" +
-                            "Eye color list: " + ColorEye.getAllValues() + "\n" +
-                            "Hair color list: " + ColorHair.getAllValues()
-                    );
-            return null;
-        }
-    }
+
     /**
      * Method checks the correctness of group's name value
      * @param name verifiable name

@@ -1,8 +1,11 @@
 package commands;
 
+import exceptions.DatabaseException;
 import exceptions.NullCollectionException;
+import exceptions.NullException;
 import manager.CollectionManager;
 import manager.requestManager.Response;
+import manager.users.User;
 
 /**
  * Command "remove_greater", deletes elements from collection with more students
@@ -15,12 +18,16 @@ public class RemoveGreater extends Command{
     }
 
     @Override
-    public Response execute(CollectionManager collectionManager) {
+    public Response execute(CollectionManager collectionManager, User user) {
         try {
-            collectionManager.removeGreater(count);
-            return new Response("Bigger groups removed from collection!");
+            int number = collectionManager.removeGreater(count, user);
+            return new Response(number + " bigger groups removed from collection!");
         } catch (NullCollectionException e){
             return new Response("Collection is empty");
+        //} catch (DatabaseException e){
+          //  return new Response("\u001B[31m" + "Study groups was not removed to collection" + "\u001B[0m");
+        } catch (NullException e){
+            return new Response("Bigger groups are not exists");
         }
     }
 

@@ -6,6 +6,7 @@ import exceptions.IncorrectScriptException;
 import exceptions.IncorrectValueException;
 import exceptions.NullException;
 
+import java.io.Console;
 import java.util.Scanner;
 
 import static data.Coordinates.MAX_X;
@@ -77,6 +78,41 @@ public class ScannerManager {
         }
         return pport;
     }
+
+    public String sayLogin(){
+        String login = "";
+        while (login.equals("")){
+            try{
+                System.out.print("Print login: ");
+                login = scanner.nextLine().trim();
+                if(login.equals("")) throw new NullException();
+            } catch (NullException e){
+                ConsoleManager.printError("Login can't be empty");
+            }
+        }
+        return login;
+    }
+
+    public String sayPassword(){
+        String password = "";
+        Console console = System.console();
+        while (password.equals("")){
+            try{
+                System.out.print("Print password: ");
+                if(console != null){
+                    password = String.valueOf(console.readPassword());
+                } else {
+                    password = scanner.nextLine().trim();
+                }
+                if(password.equals("")) throw new NullException();
+            } catch (NullException e){
+                ConsoleManager.printError("Password can't be empty");
+            }
+        }
+        return password;
+    }
+
+
     /**
      * Method gets the name from the input
      * @param asking prompt to enter a name
@@ -395,7 +431,11 @@ public class ScannerManager {
      * @throws IncorrectScriptException incorrect person's description in script
      */
     public Person sayPerson() throws IncorrectScriptException{
-        return new Person(sayPersonName(), sayHeight(), sayColorEye(), sayColorHair(), sayNationality());
+        try {
+            return new Person(sayPersonName(), sayHeight(), sayColorEye(), sayColorHair(), sayNationality());
+        } catch (IncorrectGroupValueException e){
+            return null;
+        }
     }
 
 

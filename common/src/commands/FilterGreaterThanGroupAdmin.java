@@ -1,6 +1,7 @@
 package commands;
 import manager.CollectionManager;
 import manager.requestManager.Response;
+import manager.users.User;
 
 /**
  *  Command 'filter_greater_than_group_admin', displays all the elements of collection, the admin's height value in which of greater
@@ -15,7 +16,7 @@ public class FilterGreaterThanGroupAdmin extends Command{
     }
 
     @Override
-    public Response execute(CollectionManager collectionManager) {
+    public Response execute(CollectionManager collectionManager, User user) {
         return new Response("Greater groups:" + collectionManager.getGreater(height));
     }
 

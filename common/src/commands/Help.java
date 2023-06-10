@@ -2,13 +2,14 @@ package commands;
 
 import manager.CollectionManager;
 import manager.requestManager.Response;
+import manager.users.User;
 
 /**
  * Command 'help', displays information about all commands
  */
 public class Help extends Command{
 
-    public static final String ANSI_RESET = "\u001B[0m";
+    //public static final String ANSI_RESET = "\u001B[0m";
     public static final String ANSI_CYAN = "\u001B[36m";
 
     public static final String ANSI_GREEN = "\u001B[32m";
@@ -24,7 +25,7 @@ public class Help extends Command{
     private String com = ANSI_GREEN + "Command: " + ANSI_CYAN;
     private String des = ANSI_GREEN + "Description: " + ANSI_YELLOW;
     @Override
-    public Response execute(CollectionManager collectionManager){
+    public Response execute(CollectionManager collectionManager, User user){
         return new Response(
                 com + "add <study_group>, " + des +  "add a new element to collection\n" +
                         com + "add_if_max <study_group>, " + des +"add new element to collection, if this students count is more than max students count in collection\n" +
@@ -42,8 +43,11 @@ public class Help extends Command{
                         com + "remove_greater <count>, " + des + "remove all groups from collection that have more student\n" +
                         com + "remove_lower <count>, " + des + "remove all groups from collection that have less student\n" +
                         com + "show, " + des + "display all elements from collection\n" +
-                        com + "update_by_id <id, study_group> , " + des + "update element from collection by id"
-        );
+                        com + "update_by_id <id, study_group> , " + des + "update element from collection by id\n" +
+                        com + "reg, " + des + "registration on system\n" +
+                        com + "login," + des + "authorization on system\n" +
+                        com + "logout, " + des + "logout from system"
+         );
     }
 
 

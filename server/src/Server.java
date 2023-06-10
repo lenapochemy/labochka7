@@ -1,7 +1,10 @@
 import commands.Command;
+import data.Semester;
 import manager.*;
+import manager.requestManager.Request;
 import manager.requestManager.Response;
 import manager.requestManager.Serializer;
+import manager.users.User;
 
 import java.io.*;
 import java.net.InetSocketAddress;
@@ -10,6 +13,8 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.rmi.ServerError;
+import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.Scanner;
 import java.util.Set;
@@ -19,6 +24,8 @@ public class Server {
     private static Selector selector;
 
     public static void main(String[] args){
+        try {
+            Class.forName("org.postgresql.Driver");
 
         try {
             startServer();
@@ -38,20 +45,26 @@ public class Server {
         } catch (InterruptedException e){
             ConsoleManager.printError("interrupted");
         }
+
+        }  catch (ClassNotFoundException e){
+            System.out.println("Data base driver is not found");
+        }
     }
 
     private static void startServer(){
-        String resp;
-        if(ServerConfig.fileManager.isFileEmpty()){
-            ServerConfig.collectionManager.createCollection();
-            resp = "File 'study_groups.json' is not found or empty, so collection is empty";
-        } else{
-            ServerConfig.collectionManager.readFromFile();
-            resp = "Collection is filled from file 'study_groups.json'!";
+        //String resp;
+        ServerConfig.dataBaseHandler.connectToDatabase();
+        ServerConfig.collectionManager.loadFromDatabase();
+       // if(ServerConfig.collectionManager.collectionSize() > 0){
+        try {
+            ServerConfig.collectionManager.dataBaseHandler.registrationUser(ServerConfig.admin.getLogin(), ServerConfig.admin.getPassword());
+        } catch (SQLException e){
+            ConsoleManager.printError("Problem with database");
         }
-        ConsoleManager.printInfo(resp);
 
     }
+
+
 
     private static ServerSocketChannel openChannel(Selector selector) throws IOException{
         ServerSocketChannel server = ServerSocketChannel.open();
@@ -67,12 +80,10 @@ public class Server {
         while (channel.isOpen()){
             try {
                 selector.select();
-
             } catch (IOException e){
                 ConsoleManager.printError("io io io io io ");
             }
                 iteratorLoop(channel);
-
         }
     }
 
@@ -90,12 +101,15 @@ public class Server {
                     socketChannel.configureBlocking(false);
                     socketChannel.register(selector, SelectionKey.OP_READ);
                 } else if (key.isReadable()) {
+
                     SocketChannel socketChannel = (SocketChannel) key.channel();
-                    Command command = Sender.getCommand(socketChannel);
+                    Request request = Sender.getRequest(socketChannel);
+                    Command command = request.getCommand();
+                    User user = request.getUser();
                     ConsoleManager.printInfo("Receive command: " + command.getName());
 
-                    Response response = command.execute(ServerConfig.collectionManager);
-                    ByteBuffer buffer = Serializer.serializeResponse(response);
+                    Response response = command.execute(ServerConfig.collectionManager, user);
+                    ByteBuffer buffer = Serializer.serialize(response);
                     socketChannel.write(buffer);
                     ConsoleManager.printSuccess("Sending response: " + response.getMessage());
                 }

@@ -1,8 +1,11 @@
 package commands;
 
+import exceptions.DatabaseException;
 import exceptions.NullCollectionException;
+import exceptions.NullException;
 import manager.CollectionManager;
 import manager.requestManager.Response;
+import manager.users.User;
 
 /**
  * Command "remove_lower", deletes elements from collection with less students
@@ -15,12 +18,16 @@ public class RemoveLower extends Command{
     }
 
     @Override
-    public Response execute(CollectionManager collectionManager){
+    public Response execute(CollectionManager collectionManager, User user){
         try {
-            collectionManager.removeLower(count);
-            return new Response("Smaller groups removed from collection!");
+            int number = collectionManager.removeLower(count, user);
+            return new Response(number + " smaller groups removed from collection");
         } catch (NullCollectionException e){
             return new Response("Collection is empty");
+        //} catch (DatabaseException e){
+          //  return new Response("\u001B[31m" + "Study groups was not removed from collection" + "\u001B[0m");
+        } catch (NullException e){
+            return new Response("Smaller groups are not exists");
         }
     }
 
