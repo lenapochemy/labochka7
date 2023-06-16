@@ -18,6 +18,8 @@ import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class Server {
 
@@ -27,7 +29,23 @@ public class Server {
         try {
             Class.forName("org.postgresql.Driver");
 
-        try {
+            try{
+                startServer();
+                selector = Selector.open();
+                ServerSocketChannel server = openChannel(selector);
+
+                ConsoleThread consoleThread = new ConsoleThread();
+                ConsoleManager.printInfo("Print command (maybe 'help')");
+                consoleThread.start();
+
+                run(server);
+
+            } catch (IOException e){
+                ConsoleManager.printError("IO problem");
+            }
+
+
+       /* try {
             startServer();
             selector = Selector.open();
             ServerSocketChannel server = openChannel(selector);
@@ -45,6 +63,7 @@ public class Server {
         } catch (InterruptedException e){
             ConsoleManager.printError("interrupted");
         }
+        */
 
         }  catch (ClassNotFoundException e){
             System.out.println("Data base driver is not found");
@@ -64,8 +83,6 @@ public class Server {
 
     }
 
-
-
     private static ServerSocketChannel openChannel(Selector selector) throws IOException{
         ServerSocketChannel server = ServerSocketChannel.open();
         int port = ServerConfig.scannerManager.sayPort();
@@ -76,18 +93,34 @@ public class Server {
         return server;
     }
 
-    private static void selectorLoop(ServerSocketChannel channel) throws ClassNotFoundException, InterruptedException{
+    private static void run(ServerSocketChannel server) throws IOException{
+        ExecutorService executorService = Executors.newCachedThreadPool();
+        try {
+            selectorLoop(server, executorService);
+        } catch (ClassNotFoundException e){
+            ConsoleManager.printError("class not found");
+        } catch (InterruptedException e){
+            ConsoleManager.printError("interrupted");
+        }
+        /*while (true){
+            SocketChannel socket = server.accept();
+            executorService.submit(new GetThread(socket));
+        }
+         */
+    }
+
+    private static void selectorLoop(ServerSocketChannel channel, ExecutorService executorService) throws ClassNotFoundException, InterruptedException{
         while (channel.isOpen()){
             try {
                 selector.select();
             } catch (IOException e){
                 ConsoleManager.printError("io io io io io ");
             }
-                iteratorLoop(channel);
+                iteratorLoop(channel, executorService);
         }
     }
 
-    private static void iteratorLoop(ServerSocketChannel channel) throws ClassNotFoundException{
+    private static void iteratorLoop(ServerSocketChannel channel, ExecutorService executorService) throws ClassNotFoundException{
         Set<SelectionKey> readyKeys = selector.selectedKeys();
         Iterator<SelectionKey> iterator = readyKeys.iterator();
 
@@ -103,6 +136,9 @@ public class Server {
                 } else if (key.isReadable()) {
 
                     SocketChannel socketChannel = (SocketChannel) key.channel();
+                    executorService.submit(new GetThread(socketChannel));
+
+                   /* SocketChannel socketChannel = (SocketChannel) key.channel();
                     Request request = Sender.getRequest(socketChannel);
                     Command command = request.getCommand();
                     User user = request.getUser();
@@ -112,12 +148,15 @@ public class Server {
                     ByteBuffer buffer = Serializer.serialize(response);
                     socketChannel.write(buffer);
                     ConsoleManager.printSuccess("Sending response: " + response.getMessage());
+
+                    */
                 }
             }catch (IOException e){
                // ConsoleManager.printError("ochen' ploho");
             }
         }
     }
+
 
 
 }

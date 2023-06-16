@@ -1,11 +1,7 @@
-import manager.CollectionManager;
-import manager.CommandManager;
-import manager.ConsoleManager;
-import manager.ScannerManager;
+import manager.*;
 import manager.database.DataBaseHandler;
 import manager.users.User;
 
-import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.util.Scanner;

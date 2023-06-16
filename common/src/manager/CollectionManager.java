@@ -2,17 +2,16 @@ package manager;
 
 import data.FormOfEducation;
 import data.StudyGroup;
-import exceptions.DatabaseException;
-import exceptions.NullCollectionException;
-import exceptions.NullException;
+import exceptions.*;
 import manager.database.DataBaseHandler;
 import manager.users.User;
 
-import javax.xml.crypto.Data;
 import java.sql.SQLException;
 import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /**
  * Class responsible for working with the collection
@@ -30,6 +29,7 @@ public class CollectionManager {
      */
     private Set<Integer> idCollection = new HashSet<>();
     private int newId = 1;
+    private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     /**
      * Time when the collection was last modified
@@ -59,11 +59,16 @@ public class CollectionManager {
      * @return elements count
      */
     public int collectionSize(){
-        try{
-            if(studyGroupCollection == null) throw new NullCollectionException();
-            return studyGroupCollection.size();
-        }catch (NullCollectionException e){
-            return 0;
+        try {
+            lock.readLock().lock();
+            try {
+                if (studyGroupCollection == null) throw new NullCollectionException();
+                return studyGroupCollection.size();
+            } catch (NullCollectionException e) {
+                return 0;
+            }
+        } finally {
+            lock.readLock().unlock();
         }
     }
 
@@ -72,7 +77,7 @@ public class CollectionManager {
         ConsoleManager.printInfo("Collection was filled from database, groups count: "+ collectionSize());
     }
 
-    /**
+   /* /**
      * Method generates a new unique id for the group
      * @return group's id
      */
@@ -90,13 +95,18 @@ public class CollectionManager {
      * @param studyGroup new element for collection
      */
     public void addToCollection(StudyGroup studyGroup, User user) throws DatabaseException {
-        int id = dataBaseHandler.addStudyGroup(studyGroup, user);
-        if( id != 0){
-            studyGroup.setId(id);
-            studyGroupCollection.add(studyGroup);
-            lastInitDate = LocalDate.now();
-            lastSaveDate = LocalDate.now();
-        } else throw new DatabaseException();
+        try {
+            lock.writeLock().lock();
+            int id = dataBaseHandler.addStudyGroup(studyGroup, user);
+            if (id != 0) {
+                studyGroup.setId(id);
+                studyGroupCollection.add(studyGroup);
+                lastInitDate = LocalDate.now();
+                lastSaveDate = LocalDate.now();
+            } else throw new DatabaseException();
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     public void addToCollectionWithId(StudyGroup studyGroup, User user) throws DatabaseException{
@@ -111,13 +121,18 @@ public class CollectionManager {
      * Method clears the collection
      */
     public void clearCollection(User user) throws DatabaseException{
-        if(user.getLogin().equals("admin")){
-            if(dataBaseHandler.clearCollectionAdmin()){
-                studyGroupCollection.clear();
-                idCollection.clear();
-            } else throw new DatabaseException();
-        } else {
-            this.studyGroupCollection = dataBaseHandler.clearCollection(user);
+        try {
+            lock.writeLock().lock();
+            if (user.getLogin().equals("admin")) {
+                if (dataBaseHandler.clearCollectionAdmin()) {
+                    studyGroupCollection.clear();
+                    idCollection.clear();
+                } else throw new DatabaseException();
+            } else {
+                this.studyGroupCollection = dataBaseHandler.clearCollection(user);
+            }
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 
@@ -127,11 +142,16 @@ public class CollectionManager {
      * @return max students count
      */
     public Integer getMaxGroup(){
-        Integer max = 0;
-        for(StudyGroup group : studyGroupCollection){
-            if(group.getStudentsCount() > max) max = group.getStudentsCount();
+        try {
+            lock.readLock().lock();
+            Integer max = 0;
+            for (StudyGroup group : studyGroupCollection) {
+                if (group.getStudentsCount() > max) max = group.getStudentsCount();
+            }
+            return max;
+        } finally {
+            lock.readLock().unlock();
         }
-        return max;
     }
 
     /**
@@ -140,16 +160,25 @@ public class CollectionManager {
      * @return desired group
      */
     public StudyGroup getByID(int id){
-        for(StudyGroup group : studyGroupCollection){
-            if(group.getId() == id)  return group;
+        try {
+            lock.readLock().lock();
+            for (StudyGroup group : studyGroupCollection) {
+                if (group.getId() == id) return group;
+            }
+            return null;
+        } finally {
+            lock.readLock().unlock();
         }
-        return null;
     }
 
     public void updateByID(StudyGroup oldGroup, StudyGroup newGroup, User user) throws DatabaseException{
-        removeFromCollection(oldGroup, user);
-        addToCollectionWithId(newGroup, user);
-
+        try {
+            lock.writeLock().lock();
+            removeFromCollection(oldGroup, user);
+            addToCollectionWithId(newGroup, user);
+        } finally {
+            lock.writeLock().unlock();
+        }
     }
 
     /**
@@ -168,14 +197,19 @@ public class CollectionManager {
      * @param id id of the group to delete
      */
     public boolean removeByID(int id, User user) throws DatabaseException{
-        StudyGroup studyGroup = getByID(id);
         try {
-            if(studyGroup == null) throw new NullException();
-            removeFromCollection(studyGroup, user);
-            return true;
-        } catch (NullException e){
-            ConsoleManager.printError("Study group with this ID is not exists");
-            return false;
+            lock.writeLock().lock();
+            StudyGroup studyGroup = getByID(id);
+            try {
+                if (studyGroup == null) throw new NullException();
+                removeFromCollection(studyGroup, user);
+                return true;
+            } catch (NullException e) {
+                ConsoleManager.printError("Study group with this ID is not exists");
+                return false;
+            }
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 
@@ -191,17 +225,17 @@ public class CollectionManager {
                     idSet.add(group.getId());
                 }
             }
-            if(idSet.isEmpty()) throw new NullException();
-        int number = idSet.size();
-        for(Integer id: idSet){
-            try {
-                removeByID(id, user);
-            } catch (DatabaseException e){
-                number--;
-            }
-        }
-        return number;
 
+            if (idSet.isEmpty()) throw new NullException();
+            int number = idSet.size();
+            for (Integer id : idSet) {
+                try {
+                    removeByID(id, user);
+                } catch (DatabaseException e) {
+                    number--;
+                }
+            }
+            return number;
     }
 
 
@@ -210,23 +244,23 @@ public class CollectionManager {
      * @param count min number of students in groups that remain in the collection
      */
     public int removeLower(Integer count, User user) throws NullCollectionException, NullException{
-        if (studyGroupCollection.isEmpty()) throw new NullCollectionException();
-        HashSet<Integer> idSet = new HashSet<>();
-        for(StudyGroup group : studyGroupCollection){
-            if(group.getStudentsCount() < count){
-                idSet.add(group.getId());
+            if (studyGroupCollection.isEmpty()) throw new NullCollectionException();
+            HashSet<Integer> idSet = new HashSet<>();
+            for (StudyGroup group : studyGroupCollection) {
+                if (group.getStudentsCount() < count) {
+                    idSet.add(group.getId());
+                }
             }
-        }
-        if(idSet.isEmpty()) throw new NullException();
-        int number = idSet.size();
-        for(Integer id: idSet){
-            try {
-                removeByID(id, user);
-            } catch (DatabaseException e){
-                number--;
+            if (idSet.isEmpty()) throw new NullException();
+            int number = idSet.size();
+            for (Integer id : idSet) {
+                try {
+                    removeByID(id, user);
+                } catch (DatabaseException e) {
+                    number--;
+                }
             }
-        }
-        return number;
+            return number;
     }
 
     /**
@@ -235,19 +269,24 @@ public class CollectionManager {
      */
     public boolean removeByFormOfEducation(FormOfEducation formOfEducation, User user)  {
         try {
-            for (StudyGroup group : studyGroupCollection) {
-                if (group.getFormOfEducation().equals(formOfEducation) && dataBaseHandler.isOwner(group.getId(), user.getLogin())) {
-                    removeFromCollection(group, user);
-                    return true;
-                    //break;
+            lock.readLock().lock();
+            try {
+                for (StudyGroup group : studyGroupCollection) {
+                    if (group.getFormOfEducation().equals(formOfEducation) && dataBaseHandler.isOwner(group.getId(), user.getLogin())) {
+                        removeFromCollection(group, user);
+                        return true;
+                        //break;
+                    }
                 }
+                return false;
+            } catch (SQLException e) {
+                ConsoleManager.printError("problem with data base");
+                return false;
+            } catch (DatabaseException e) {
+                return false;
             }
-            return false;
-        } catch (SQLException e){
-            ConsoleManager.printError("problem with data base");
-            return false;
-        } catch (DatabaseException e){
-            return false;
+        } finally {
+            lock.readLock().unlock();
         }
     }
 
@@ -255,68 +294,87 @@ public class CollectionManager {
      * Method displays all elements from collection
      */
     public String printCollection(){
-        StringBuilder print = new StringBuilder();
-         for(StudyGroup group : studyGroupCollection){
-            print.append(group.toString() + "\n");
+        try {
+            lock.readLock().lock();
+            StringBuilder print = new StringBuilder();
+            for (StudyGroup group : studyGroupCollection) {
+                print.append(group.toString() + "\n");
+            }
+            return print.toString();
+        } finally {
+            lock.readLock().unlock();
         }
-         return print.toString();
     }
 
     public String showInfo() {
-
-        LocalDate lastInitDate = getLastInitDate();
-        String sLastInitDate;
-        if (lastInitDate == null) sLastInitDate = "No command in this session";
-        else sLastInitDate = lastInitDate.toString();
-        LocalDate lastSaveDate = getLastSaveDate();
-        String sLastSaveDate;
-        if (lastSaveDate == null) sLastSaveDate = "No saved in this session";
-        else sLastSaveDate = lastSaveDate.toString();
-        String info = "Collection info:\n" +
-                "  Type: " + collectionType() + "\n" +
-                "  Last save: " + sLastSaveDate + "\n" +
-                "  Last init: " + sLastInitDate + "\n" +
-                "  Number of elements: " + collectionSize();
-        return info;
+        try {
+            lock.readLock().lock();
+            LocalDate lastInitDate = getLastInitDate();
+            String sLastInitDate;
+            if (lastInitDate == null) sLastInitDate = "No command in this session";
+            else sLastInitDate = lastInitDate.toString();
+            LocalDate lastSaveDate = getLastSaveDate();
+            String sLastSaveDate;
+            if (lastSaveDate == null) sLastSaveDate = "No saved in this session";
+            else sLastSaveDate = lastSaveDate.toString();
+            String info = "Collection info:\n" +
+                    "  Type: " + collectionType() + "\n" +
+                    "  Last save: " + sLastSaveDate + "\n" +
+                    "  Last init: " + sLastInitDate + "\n" +
+                    "  Number of elements: " + collectionSize();
+            return info;
+        } finally {
+            lock.readLock().unlock();
+        }
     }
     /**
      * Method displays groups whose admins are above this height
      * @param height max height of admins of groups that remain in the collection
      */
     public String getGreater(Integer height){
-        StringBuilder groups = new StringBuilder();
-        for(StudyGroup group : studyGroupCollection){
-            if(group.getGroupAdmin().getHeight() > height) {
-                groups.append("\n");
-                groups.append(group.toString());
+        try {
+            lock.readLock().lock();
+            StringBuilder groups = new StringBuilder();
+            for (StudyGroup group : studyGroupCollection) {
+                if (group.getGroupAdmin().getHeight() > height) {
+                    groups.append("\n");
+                    groups.append(group.toString());
+                }
             }
+            return groups.toString();
+        } finally {
+            lock.readLock().unlock();
         }
-        return groups.toString();
     }
 
     /**
      * Method displays the forms of education of all groups from the collection in descending order
      */
     public String printFromOfEducation(){
-        StringBuilder print = new StringBuilder();
-        int countDistance = 0;
-        int countFullTime = 0;
-        int countEventing = 0;
-        for(StudyGroup group : studyGroupCollection){
-            if(group.getFormOfEducation().equals(FormOfEducation.DISTANCE_EDUCATION)) countDistance++;
-            if(group.getFormOfEducation().equals(FormOfEducation.FULL_TIME_EDUCATION)) countFullTime++;
-            if(group.getFormOfEducation().equals(FormOfEducation.EVENTING_CLASSES)) countEventing++;
+        try {
+            lock.readLock().lock();
+            StringBuilder print = new StringBuilder();
+            int countDistance = 0;
+            int countFullTime = 0;
+            int countEventing = 0;
+            for (StudyGroup group : studyGroupCollection) {
+                if (group.getFormOfEducation().equals(FormOfEducation.DISTANCE_EDUCATION)) countDistance++;
+                if (group.getFormOfEducation().equals(FormOfEducation.FULL_TIME_EDUCATION)) countFullTime++;
+                if (group.getFormOfEducation().equals(FormOfEducation.EVENTING_CLASSES)) countEventing++;
+            }
+            for (int i = 0; i < countEventing; i++) {
+                print.append(FormOfEducation.EVENTING_CLASSES).append("\n");
+            }
+            for (int i = 0; i < countFullTime; i++) {
+                print.append(FormOfEducation.FULL_TIME_EDUCATION).append("\n");
+            }
+            for (int i = 0; i < countDistance; i++) {
+                print.append(FormOfEducation.DISTANCE_EDUCATION).append("\n");
+            }
+            return print.toString();
+        } finally {
+            lock.readLock().unlock();
         }
-        for(int i=0; i<countEventing; i++){
-            print.append(FormOfEducation.EVENTING_CLASSES).append("\n");
-        }
-        for(int i=0; i<countFullTime; i++){
-            print.append(FormOfEducation.FULL_TIME_EDUCATION).append("\n");
-        }
-        for(int i=0; i<countDistance; i++){
-            print.append(FormOfEducation.DISTANCE_EDUCATION).append("\n");
-        }
-        return print.toString();
     }
 
     /**

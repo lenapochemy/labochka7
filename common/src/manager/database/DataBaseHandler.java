@@ -8,6 +8,8 @@ import manager.users.User;
 import java.sql.*;
 import java.time.LocalDate;
 import java.util.HashSet;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class DataBaseHandler {
 
@@ -15,7 +17,7 @@ public class DataBaseHandler {
     private static final String VALIDATE_USER = "SELECT COUNT(*) AS count FROM users WHERE login = ? AND password =?";
     private static final String FIND_LOGIN = "SELECT COUNT(*) AS count FROM users WHERE login = ?";
     private static final String USER_ID_BY_LOGIN = "SELECT id FROM users WHERE login = ?";
-    private static final String USER_BY_ID = "SELECT * FROM users WHERE id = ?";
+    //private static final String USER_BY_ID = "SELECT * FROM users WHERE id = ?";
     private static final String ADD_STUDY_GROUP = "INSERT INTO study_groups (name, coordinate_x, coordinate_y, creation_date, students_count, " +
             "form_of_education, semester, admin_name, admin_height, admin_eye_color, admin_hair_color, admin_nationality, user_id) " +
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
@@ -26,7 +28,7 @@ public class DataBaseHandler {
     private static final String ALL_GROUPS = "SELECT * FROM study_groups";
     private static final String CLEAR = "TRUNCATE TABLE study_groups";
     private static final String REMOVE_BY_ID = "DELETE FROM study_groups WHERE id = ?";
-    private static final String ALL_USERS_GROUP = "SELECT * FROM study_groups WHERE user_id = ?";
+    //private static final String ALL_USERS_GROUP = "SELECT * FROM study_groups WHERE user_id = ?";
     private static final String GROUP_ID = "SELECT * FROM study_groups WHERE name = ? AND coordinate_x = ? AND  coordinate_y = ? AND  " +
             "creation_date = ? AND  students_count = ? AND  form_of_education = ? AND  semester = ? AND  admin_name = ? AND  admin_height = ? AND  " +
             "admin_eye_color = ? AND  admin_hair_color = ? AND  admin_nationality = ? AND  user_id =?";
@@ -59,12 +61,13 @@ public class DataBaseHandler {
             clearStatement.executeUpdate();
             clearStatement.close();
             return true;
-        } catch (SQLException e){
+        } catch (SQLException e) {
             return false;
         }
+
     }
 
-    private HashSet<StudyGroup> userGroups(User user){
+    /*private HashSet<StudyGroup> userGroups(User user){
         HashSet<StudyGroup> studyGroups = new HashSet<>();
         try {
             PreparedStatement userStatement = connection.prepareStatement(USER_ID_BY_LOGIN);
@@ -90,44 +93,47 @@ public class DataBaseHandler {
         }
     }
 
+     */
+
     public HashSet<StudyGroup> clearCollection(User user){
-        HashSet<StudyGroup> studyGroups = new HashSet<>();
-        try{
-            connection.setAutoCommit(false);
-            connection.setSavepoint();
-            PreparedStatement allGroupsStatement = connection.prepareStatement(ALL_GROUPS);
-            ResultSet resultSet = allGroupsStatement.executeQuery();
-            int id;
-            StudyGroup group;
-            while (resultSet.next()){
-                group = studyGroupFromResult(resultSet);
-                if(isOwner(group.getId(), user.getLogin())){
-                    removeGroup(group, user);
-                } else{
-                    studyGroups.add(group);
-                }
+
+            HashSet<StudyGroup> studyGroups = new HashSet<>();
+            try {
+                    connection.setAutoCommit(false);
+                    connection.setSavepoint();
+                    PreparedStatement allGroupsStatement = connection.prepareStatement(ALL_GROUPS);
+                    ResultSet resultSet = allGroupsStatement.executeQuery();
+                   // int id;
+                    StudyGroup group;
+                    while (resultSet.next()) {
+                        group = studyGroupFromResult(resultSet);
+                        if (isOwner(group.getId(), user.getLogin())) {
+                            removeGroup(group, user);
+                        } else {
+                            studyGroups.add(group);
+                        }
+                    }
+                    allGroupsStatement.close();
+                    connection.commit();
+                    connection.setAutoCommit(true);
+                    return studyGroups;
+            } catch (IncorrectGroupValueException e) {
+                return null;
+            } catch (SQLException e) {
+                ConsoleManager.printError("Problem with clearing collection");
+                rollback();
+                return null;
             }
-            allGroupsStatement.close();
-            connection.commit();
-            connection.setAutoCommit(true);
-            return studyGroups;
-        } catch (IncorrectGroupValueException e){
-            return null;
-        } catch (SQLException e){
-            ConsoleManager.printError("Problem with clearing collection");
-            rollback();
-            return null;
-        }
     }
 
     public boolean registrationUser(String login, String password)throws SQLException{
         if(isUserExist(login)) return false;
-        PreparedStatement addStatement = connection.prepareStatement(ADD_USER);
-        addStatement.setString(1, login);
-        addStatement.setString(2, PasswordHasher.encryptPassword(password));
-        addStatement.executeUpdate();
-        addStatement.close();
-        return true;
+            PreparedStatement addStatement = connection.prepareStatement(ADD_USER);
+            addStatement.setString(1, login);
+            addStatement.setString(2, PasswordHasher.encryptPassword(password));
+            addStatement.executeUpdate();
+            addStatement.close();
+            return true;
     }
 
     public boolean isUserExist(String login) throws SQLException{
@@ -169,15 +175,18 @@ public class DataBaseHandler {
 
     public boolean removeGroup(StudyGroup studyGroup, User user){
         try {
-            if(isOwner(studyGroup.getId(), user.getLogin())) {
-                PreparedStatement removeStatement = connection.prepareStatement(REMOVE_BY_ID);
-                removeStatement.setInt(1, studyGroup.getId());
-                removeStatement.executeUpdate();
-                return true;
-            } else return false;
+                if (isOwner(studyGroup.getId(), user.getLogin())) {
+                    PreparedStatement removeStatement = connection.prepareStatement(REMOVE_BY_ID);
+                    removeStatement.setInt(1, studyGroup.getId());
+                    removeStatement.executeUpdate();
+                    return true;
+                } else {
+                    return false;
+                }
         } catch (SQLException e){
             return false;
         }
+
     }
     private StudyGroup studyGroupFromResult(ResultSet result) throws SQLException, IncorrectGroupValueException{
         StudyGroup studyGroup;
@@ -247,29 +256,29 @@ public class DataBaseHandler {
             int user_id = result.getInt("id");
             userStatement.close();
 
-            connection.setAutoCommit(false);
-            connection.setSavepoint();
-            PreparedStatement addStatement = connection.prepareStatement(ADD_STUDY_GROUP_WITH_ID);
-            addStatement.setInt(1, studyGroup.getId());
-            addStatement.setString(2, studyGroup.getName());
-            addStatement.setInt(3, studyGroup.getCoordinates().getCoordinatesX());
-            addStatement.setDouble(4, studyGroup.getCoordinates().getCoordinatesY());
-            addStatement.setString(5, studyGroup.getCreationDate().toString());
-            addStatement.setInt(6, studyGroup.getStudentsCount());
-            addStatement.setString(7, studyGroup.getFormOfEducation().toString());
-            addStatement.setString(8, studyGroup.getSemesterEnum().toString());
-            addStatement.setString(9, studyGroup.getGroupAdmin().getName());
-            addStatement.setInt(10, studyGroup.getGroupAdmin().getHeight());
-            addStatement.setString(11, studyGroup.getGroupAdmin().getEyeColor().name());
-            addStatement.setString(12, studyGroup.getGroupAdmin().getHairColor().name());
-            addStatement.setString(13, studyGroup.getGroupAdmin().getNationality().name());
-            addStatement.setInt(14, user_id);
+                connection.setAutoCommit(false);
+                connection.setSavepoint();
+                PreparedStatement addStatement = connection.prepareStatement(ADD_STUDY_GROUP_WITH_ID);
+                addStatement.setInt(1, studyGroup.getId());
+                addStatement.setString(2, studyGroup.getName());
+                addStatement.setInt(3, studyGroup.getCoordinates().getCoordinatesX());
+                addStatement.setDouble(4, studyGroup.getCoordinates().getCoordinatesY());
+                addStatement.setString(5, studyGroup.getCreationDate().toString());
+                addStatement.setInt(6, studyGroup.getStudentsCount());
+                addStatement.setString(7, studyGroup.getFormOfEducation().toString());
+                addStatement.setString(8, studyGroup.getSemesterEnum().toString());
+                addStatement.setString(9, studyGroup.getGroupAdmin().getName());
+                addStatement.setInt(10, studyGroup.getGroupAdmin().getHeight());
+                addStatement.setString(11, studyGroup.getGroupAdmin().getEyeColor().name());
+                addStatement.setString(12, studyGroup.getGroupAdmin().getHairColor().name());
+                addStatement.setString(13, studyGroup.getGroupAdmin().getNationality().name());
+                addStatement.setInt(14, user_id);
 
-            addStatement.executeUpdate();
-            addStatement.close();
+                addStatement.executeUpdate();
+                addStatement.close();
 
-            connection.commit();
-            connection.setAutoCommit(true);
+                connection.commit();
+                connection.setAutoCommit(true);
             return true;
         } catch (SQLException e){
             ConsoleManager.printError("Problem with insert group to database");
@@ -290,46 +299,46 @@ public class DataBaseHandler {
             connection.setAutoCommit(false);
             connection.setSavepoint();
 
-            PreparedStatement addStatement = connection.prepareStatement(ADD_STUDY_GROUP);
-            addStatement.setString(1, studyGroup.getName());
-            addStatement.setInt(2, studyGroup.getCoordinates().getCoordinatesX());
-            addStatement.setDouble(3, studyGroup.getCoordinates().getCoordinatesY());
-            addStatement.setString(4, studyGroup.getCreationDate().toString());
-            addStatement.setInt(5, studyGroup.getStudentsCount());
-            addStatement.setString(6, studyGroup.getFormOfEducation().toString());
-            addStatement.setString(7, studyGroup.getSemesterEnum().toString());
-            addStatement.setString(8, studyGroup.getGroupAdmin().getName());
-            addStatement.setInt(9, studyGroup.getGroupAdmin().getHeight());
-            addStatement.setString(10, studyGroup.getGroupAdmin().getEyeColor().name());
-            addStatement.setString(11, studyGroup.getGroupAdmin().getHairColor().name());
-            addStatement.setString(12, studyGroup.getGroupAdmin().getNationality().name());
-            addStatement.setInt(13, user_id);
+                PreparedStatement addStatement = connection.prepareStatement(ADD_STUDY_GROUP);
+                addStatement.setString(1, studyGroup.getName());
+                addStatement.setInt(2, studyGroup.getCoordinates().getCoordinatesX());
+                addStatement.setDouble(3, studyGroup.getCoordinates().getCoordinatesY());
+                addStatement.setString(4, studyGroup.getCreationDate().toString());
+                addStatement.setInt(5, studyGroup.getStudentsCount());
+                addStatement.setString(6, studyGroup.getFormOfEducation().toString());
+                addStatement.setString(7, studyGroup.getSemesterEnum().toString());
+                addStatement.setString(8, studyGroup.getGroupAdmin().getName());
+                addStatement.setInt(9, studyGroup.getGroupAdmin().getHeight());
+                addStatement.setString(10, studyGroup.getGroupAdmin().getEyeColor().name());
+                addStatement.setString(11, studyGroup.getGroupAdmin().getHairColor().name());
+                addStatement.setString(12, studyGroup.getGroupAdmin().getNationality().name());
+                addStatement.setInt(13, user_id);
 
-            addStatement.executeUpdate();
-            addStatement.close();
+                addStatement.executeUpdate();
+                addStatement.close();
 
-            PreparedStatement idStatement = connection.prepareStatement(GROUP_ID);
-            idStatement.setString(1, studyGroup.getName());
-            idStatement.setInt(2, studyGroup.getCoordinates().getCoordinatesX());
-            idStatement.setDouble(3, studyGroup.getCoordinates().getCoordinatesY());
-            idStatement.setString(4, studyGroup.getCreationDate().toString());
-            idStatement.setInt(5, studyGroup.getStudentsCount());
-            idStatement.setString(6, studyGroup.getFormOfEducation().toString());
-            idStatement.setString(7, studyGroup.getSemesterEnum().toString());
-            idStatement.setString(8, studyGroup.getGroupAdmin().getName());
-            idStatement.setInt(9, studyGroup.getGroupAdmin().getHeight());
-            idStatement.setString(10, studyGroup.getGroupAdmin().getEyeColor().name());
-            idStatement.setString(11, studyGroup.getGroupAdmin().getHairColor().name());
-            idStatement.setString(12, studyGroup.getGroupAdmin().getNationality().name());
-            idStatement.setInt(13, user_id);
-            ResultSet res = idStatement.executeQuery();
-            res.next();
-            int id = res.getInt("id");
-            idStatement.close();
+                PreparedStatement idStatement = connection.prepareStatement(GROUP_ID);
+                idStatement.setString(1, studyGroup.getName());
+                idStatement.setInt(2, studyGroup.getCoordinates().getCoordinatesX());
+                idStatement.setDouble(3, studyGroup.getCoordinates().getCoordinatesY());
+                idStatement.setString(4, studyGroup.getCreationDate().toString());
+                idStatement.setInt(5, studyGroup.getStudentsCount());
+                idStatement.setString(6, studyGroup.getFormOfEducation().toString());
+                idStatement.setString(7, studyGroup.getSemesterEnum().toString());
+                idStatement.setString(8, studyGroup.getGroupAdmin().getName());
+                idStatement.setInt(9, studyGroup.getGroupAdmin().getHeight());
+                idStatement.setString(10, studyGroup.getGroupAdmin().getEyeColor().name());
+                idStatement.setString(11, studyGroup.getGroupAdmin().getHairColor().name());
+                idStatement.setString(12, studyGroup.getGroupAdmin().getNationality().name());
+                idStatement.setInt(13, user_id);
+                ResultSet res = idStatement.executeQuery();
+                res.next();
+                int id = res.getInt("id");
+                idStatement.close();
 
-            connection.commit();
-            connection.setAutoCommit(true);
-            return id;
+                connection.commit();
+                connection.setAutoCommit(true);
+                return id;
         } catch (SQLException e){
             ConsoleManager.printError("Problem with insert group to database");
             rollback();
